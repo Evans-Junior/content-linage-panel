@@ -71,4 +71,4 @@ Try it with `samples/sample_source.pdf` and `samples/sample_slides.pptx`. The ex
 - Scanned PDFs without a text layer give weak text results. The figure check still reads them as images.
 - Every check sends the full PDF to the APIs and costs money. A 30 page PDF is roughly $0.25 with Claude Sonnet 5. Gemini has a free tier with rate limits.
 - Gemini sometimes returns an overload error (503). The panel then shows the text results and an error for the figure check.
-- Uploaded documents are sent to Anthropic and Google. Do not use confidential material as I am not liable for any concequences after that.
+- Uploaded documents are sent to Anthropic and Google. Do not use confidential material as I am not liable for any consequences after that.

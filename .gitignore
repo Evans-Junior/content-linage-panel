@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# Participant study data: never commit this
+logs/
+
 # Python
 __pycache__/
 *.pyc

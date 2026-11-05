@@ -18,13 +18,16 @@
   a.with { background: #1d2939; color: #fff; }
   a.without { background: #fff; color: #1d2939; border: 1px solid #1d2939; }
   .url { margin-top: 6px; font-size: 12px; color: #667085; word-break: break-all; }
+  a.logs { background: #fff; color: #667085; border: 1px solid #d0d5dd; }
 </style>
 </head>
 <body>
   <h1>Content Lineage Panel — researcher links</h1>
   <p class="warn">
     This page is for you only. Open it on your own device, never on the participant's screen —
-    it exists so you don't have to type the condition URL from memory before each round.
+    it exists so you don't have to type these URLs from memory before each round. If the app is
+    hosted on a cloud platform (e.g. Streamlit Community Cloud), its storage is reset on every
+    restart, so download the logs right after each session, not just at the end of the study.
   </p>
 
   <label for="base">Server address (edit if not testing locally)</label>
@@ -37,6 +40,9 @@
     <a id="with" class="btn with" target="_blank" rel="noopener">Open — With panel</a>
     <a id="without" class="btn without" target="_blank" rel="noopener">Open — Without panel</a>
   </div>
+  <div class="buttons">
+    <a id="logs" class="btn logs" target="_blank" rel="noopener">Download session logs</a>
+  </div>
   <div class="url" id="urls"></div>
 
   <script>
@@ -44,6 +50,7 @@
     const participantInput = document.getElementById("participant");
     const withLink = document.getElementById("with");
     const withoutLink = document.getElementById("without");
+    const logsLink = document.getElementById("logs");
     const urls = document.getElementById("urls");
 
     function update() {
@@ -54,6 +61,7 @@
       const withoutUrl = base + "/?condition=without" + suffix;
       withLink.href = withUrl;
       withoutLink.href = withoutUrl;
+      logsLink.href = base + "/?view=logs";
       urls.textContent = withUrl + "  |  " + withoutUrl;
     }
     baseInput.addEventListener("input", update);

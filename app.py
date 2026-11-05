@@ -6,11 +6,13 @@ import os
 load_dotenv(os.environ.get("DOTENV_PATH"))
 
 import base64
+import glob
 import hmac
 import io
 import json
 import re
 import time
+import zipfile
 from datetime import datetime
 
 import anthropic
@@ -106,10 +108,38 @@ if not st.session_state.get("authed"):
     if entered:
         if hmac.compare_digest(entered.encode(), os.environ["APP_PASSWORD"].encode()):
             st.session_state["authed"] = True
-            log_event("session_start")
             st.rerun()
         else:
             st.error("Incorrect password.")
+    st.stop()
+
+if st.query_params.get("view") != "logs" and not st.session_state.get("logged_start"):
+    # Logged once per session, and only for a real participant visit -- not for a researcher
+    # just opening the logs-download view below, which must never show up as a session itself.
+    st.session_state["logged_start"] = True
+    log_event("session_start")
+
+if st.query_params.get("view") == "logs":
+    # Hidden, password-protected download of everything collected so far, as a zip. Needed
+    # because a cloud host's filesystem is ephemeral -- it resets on every restart (inactivity
+    # sleep, a new deploy, platform maintenance) -- so pull this down after every session rather
+    # than letting it accumulate and risk losing it.
+    st.subheader("Session logs")
+    files = sorted(glob.glob(os.path.join(LOG_DIR, "**", "*"), recursive=True))
+    files = [f for f in files if os.path.isfile(f)]
+    if not files:
+        st.info("No logs yet.")
+    else:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            for f in files:
+                zf.write(f, os.path.relpath(f, LOG_DIR))
+        st.download_button(
+            f"Download all logs ({len(files)} file(s), .zip)", buf.getvalue(),
+            file_name=f"logs_{datetime.now().strftime('%Y%m%dT%H%M%S')}.zip", mime="application/zip",
+        )
+        for f in files:
+            st.caption(os.path.relpath(f, LOG_DIR))
     st.stop()
 
 claude = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])

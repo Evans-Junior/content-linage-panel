@@ -35,6 +35,8 @@ Open `researcher_links.html` in your own browser (never on the participant's scr
 
 Every session writes a timestamped, append-only log to `logs/<participant>_<timestamp>.jsonl` (one JSON object per line) — never shown anywhere in the app, so it can't leak the study condition or bias behaviour. Logged events: `session_start`, `deck_uploaded`, `slide_view`, `check_started` / `check_completed` / `check_error`, `item_seen` (first time a finding's source is opened — includes a path to the exact page image shown, saved under `logs/images/`), `note_added`, `notes_cleared`. `logs/` is gitignored; it holds real participant data and must never be committed.
 
+**Retrieving the logs.** Running locally or on your own server, just read the `logs/` folder directly. On a cloud host (e.g. Streamlit Community Cloud), there is no file browser or SSH access, and — more importantly — **the filesystem is ephemeral**: it resets to a fresh copy of the repo on every restart (inactivity sleep, a new deploy, platform maintenance), silently losing anything not yet downloaded. Open `?view=logs` (password-protected, same as the app) to download everything collected so far as a zip; `researcher_links.html` has a button for it. Download after every session, not just at the end of the study.
+
 ## Files
 
 - `app.py`: the whole app

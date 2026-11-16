@@ -15,8 +15,7 @@
   .buttons { display: flex; gap: 10px; margin-top: 18px; }
   a.btn { flex: 1; text-align: center; padding: 12px; border-radius: 6px; text-decoration: none;
           font-weight: 600; font-size: 14px; }
-  a.with { background: #1d2939; color: #fff; }
-  a.without { background: #fff; color: #1d2939; border: 1px solid #1d2939; }
+  a.open { background: #1d2939; color: #fff; }
   .url { margin-top: 6px; font-size: 12px; color: #667085; word-break: break-all; }
   a.logs { background: #fff; color: #667085; border: 1px solid #d0d5dd; }
 </style>
@@ -24,10 +23,10 @@
 <body>
   <h1>Content Lineage Panel — researcher links</h1>
   <p class="warn">
-    This page is for you only. Open it on your own device, never on the participant's screen —
-    it exists so you don't have to type these URLs from memory before each round. If the app is
-    hosted on a cloud platform (e.g. Streamlit Community Cloud), its storage is reset on every
-    restart, so download the logs right after each session, not just at the end of the study.
+    This page is for you only. Open it on your own device — it exists so you don't have to type
+    these URLs from memory before each round. If the app is hosted on a cloud platform (e.g.
+    Streamlit Community Cloud), its storage is reset on every restart, so download the logs right
+    after each session, not just at the end of the study.
   </p>
 
   <label for="base">Server address (edit if not testing locally)</label>
@@ -37,8 +36,7 @@
   <input id="participant" value="" placeholder="P1">
 
   <div class="buttons">
-    <a id="with" class="btn with" target="_blank" rel="noopener">Open — With panel</a>
-    <a id="without" class="btn without" target="_blank" rel="noopener">Open — Without panel</a>
+    <a id="open" class="btn open" target="_blank" rel="noopener">Open app</a>
   </div>
   <div class="buttons">
     <a id="logs" class="btn logs" target="_blank" rel="noopener">Download session logs</a>
@@ -48,21 +46,18 @@
   <script>
     const baseInput = document.getElementById("base");
     const participantInput = document.getElementById("participant");
-    const withLink = document.getElementById("with");
-    const withoutLink = document.getElementById("without");
+    const openLink = document.getElementById("open");
     const logsLink = document.getElementById("logs");
     const urls = document.getElementById("urls");
 
     function update() {
       const base = baseInput.value.trim().replace(/\/+$/, "");
       const participant = participantInput.value.trim();
-      const suffix = participant ? "&participant=" + encodeURIComponent(participant) : "";
-      const withUrl = base + "/?condition=with" + suffix;
-      const withoutUrl = base + "/?condition=without" + suffix;
-      withLink.href = withUrl;
-      withoutLink.href = withoutUrl;
+      const suffix = participant ? "?participant=" + encodeURIComponent(participant) : "";
+      const openUrl = base + "/" + suffix;
+      openLink.href = openUrl;
       logsLink.href = base + "/?view=logs";
-      urls.textContent = withUrl + "  |  " + withoutUrl;
+      urls.textContent = openUrl;
     }
     baseInput.addEventListener("input", update);
     participantInput.addEventListener("input", update);

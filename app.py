@@ -6,6 +6,7 @@ import os
 load_dotenv(os.environ.get("DOTENV_PATH"))
 
 import base64
+import concurrent.futures
 import glob
 import hmac
 import io
@@ -31,18 +32,31 @@ CLAUDE_MODEL = "claude-sonnet-5"
 # Override with GEMINI_MODEL in .env if a newer Flash model is available to you.
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL") or "gemini-3.6-flash"  # `or` also covers an empty GEMINI_MODEL=
 
+# Each check's own retry/backoff logic is meant to bound a single attempt, but a stalled
+# connection (seen in testing: a figure check that never returned, well past every configured
+# retry/timeout) can still hang past all of it. This is a hard outer ceiling so that failure mode
+# can never leave a participant staring at a frozen screen -- it always surfaces as a clean error.
+CHECK_TIMEOUT_SECONDS = 90
+
+
+def _run_with_timeout(fn, *args, **kwargs):
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(fn, *args, **kwargs)
+    try:
+        return future.result(timeout=CHECK_TIMEOUT_SECONDS)
+    except concurrent.futures.TimeoutError:
+        raise TimeoutError(f"no response after {CHECK_TIMEOUT_SECONDS}s") from None
+    finally:
+        executor.shutdown(wait=False)  # don't block the UI on a thread that may never return
+
 REQUIRED_VARS = ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "APP_PASSWORD"]
 
 st.set_page_config(page_title="Content Lineage Panel", layout="wide")
 
-# Study condition and participant ID come from URL parameters, not visible controls, so a
-# participant looking at the screen sees no indication of either (open ?condition=without or
-# ?condition=with, with &participant=P1, before handing the device over -- researcher_links.html
-# builds these links for you). Condition defaults to "with" and participant to "unknown" if absent.
-show_panel = st.query_params.get("condition", "with") != "without"
+# Participant ID comes from a URL parameter (open ?participant=P1 before handing the device
+# over -- researcher_links.html builds this link for you). Defaults to "unknown" if absent.
 PARTICIPANT = (st.query_params.get("participant", "") or "unknown").strip()
-print(f"[content-lineage-panel] participant={PARTICIPANT!r} "
-      f"condition={'with' if show_panel else 'without'}")
+print(f"[content-lineage-panel] participant={PARTICIPANT!r}")
 
 
 # ---- Hidden, timestamped interaction log (never rendered in the UI) --------
@@ -66,7 +80,6 @@ def log_event(event: str, **details):
         record = {
             "time": datetime.now().astimezone().isoformat(timespec="seconds"),
             "participant": PARTICIPANT,
-            "condition": "with" if show_panel else "without",
             "event": event,
             **details,
         }
@@ -329,7 +342,10 @@ Return [] if the PDF has no figures."""
 
 def figure_check(pdf_data: bytes, slides: str) -> list[dict]:
     # Gemini occasionally returns a transient 503 ("high demand"); Google's own advice is to
-    # retry shortly after. A 4xx (bad model name, bad request) won't fix itself, so don't retry those.
+    # retry shortly after. A 4xx (bad model name, bad request) won't fix itself, so don't retry those
+    # -- except a 429, which is also worth surfacing as a specific, actionable message: a free-tier
+    # key's per-minute/per-day quota doesn't come back by retrying immediately, and burning the outer
+    # timeout on three more attempts only wastes the few requests such a key has left.
     for attempt in range(3):
         try:
             response = gemini.models.generate_content(
@@ -341,6 +357,14 @@ def figure_check(pdf_data: bytes, slides: str) -> list[dict]:
                 config=types.GenerateContentConfig(response_mime_type="application/json"),
             )
             break
+        except genai_errors.ClientError as e:
+            if getattr(e, "code", None) == 429 or "RESOURCE_EXHAUSTED" in str(e):
+                raise RuntimeError(
+                    "Gemini's request quota is used up for now. Free-tier keys allow only a "
+                    "few requests per minute and per day -- wait a while, or move this key off "
+                    "the free tier before running more sessions."
+                ) from None
+            raise
         except genai_errors.ServerError:
             if attempt == 2:
                 raise
@@ -520,50 +544,48 @@ if source and pdf_data and not pdf_data.startswith(b"%PDF"):
     st.error("That file is not a valid PDF. Please export your document as a PDF and upload it again.")
     st.stop()
 
-if not show_panel:
-    # True no-op for the study's baseline condition: no button, no API calls, no spinner,
-    # no possible error -- so a participant in this condition sees no sign the tool exists.
-    st.session_state.pop("results", None)
-    st.session_state.pop("errors", None)
-elif source and slides_upload and st.button("Check lineage"):
+run_clicked = source and slides_upload and st.button("Check lineage")
+
+# The slide viewer and panel are drawn here, before the (possibly slow) check runs below --
+# previously this whole block sat after the check, so for as long as a check was running --
+# including a check stuck retrying for minutes -- the script simply hadn't reached this code
+# yet, and the entire preview disappeared. Parsing the deck into slides_list/slides_prompt_text
+# doesn't call any API, so there's nothing to wait on to show it immediately.
+if slides_upload:
+    with st.container(border=True):
+        col_slide, col_panel = st.columns([3, 2])
+
+        with col_slide:
+            st.markdown("**Slide review window**")
+            render_slide_viewer(slides_list, slides_prompt_text)
+
+        with col_panel:
+            if "results" in st.session_state:
+                render_panel(st.session_state["results"], pdf_data)
+            else:
+                st.markdown("#### What is missing")
+                st.caption("Upload a source PDF and click Check lineage to see results here.")
+
+for err in st.session_state.get("errors", []):
+    st.error(err)
+
+if run_clicked:
     log_event("check_started")
     t0 = time.time()
     results, errors = [], []
     with st.spinner("Running text check..."):
         try:
-            results += text_check(source.name, pdf_data, slides_prompt_text)
+            results += _run_with_timeout(text_check, source.name, pdf_data, slides_prompt_text)
         except Exception as e:
             errors.append(f"Text check failed: {e}")
             log_event("check_error", check="text", error=str(e))
     with st.spinner("Running figure check..."):
         try:
-            results += figure_check(pdf_data, slides_prompt_text)
+            results += _run_with_timeout(figure_check, pdf_data, slides_prompt_text)
         except Exception as e:
             errors.append(f"Figure check failed: {e}")
             log_event("check_error", check="figure", error=str(e))
     st.session_state["results"] = results
     st.session_state["errors"] = errors
     log_event("check_completed", findings=len(results), seconds=round(time.time() - t0, 1))
-
-if show_panel:
-    for err in st.session_state.get("errors", []):
-        st.error(err)
-
-if slides_upload:
-    with st.container(border=True):
-        if show_panel:
-            col_slide, col_panel = st.columns([3, 2])
-        else:
-            col_slide, col_panel = st.container(), None
-
-        with col_slide:
-            st.markdown("**Slide review window**")
-            render_slide_viewer(slides_list, slides_prompt_text)
-
-        if col_panel is not None:
-            with col_panel:
-                if "results" in st.session_state:
-                    render_panel(st.session_state["results"], pdf_data)
-                else:
-                    st.markdown("#### What is missing")
-                    st.caption("Upload a source PDF and click Check lineage to see results here.")
+    st.rerun()  # redraw the panel above with the fresh results, now that they're ready

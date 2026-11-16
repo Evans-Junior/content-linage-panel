@@ -13,6 +13,31 @@ Upload a source PDF and a slide deck (PPTX or a text outline). The app lists eac
 
 Each result says which check it came from. Gemini occasionally returns a temporary "high demand" error; the app retries automatically before giving up, and a 429 quota error is reported immediately with a clear message instead of being retried. Either check is hard-capped at 90 seconds, so a stalled connection always surfaces as a clean error instead of freezing the page.
 
+### Figure-check fixtures (consistent results for a fixed study document)
+
+For a study, every participant should see the exact same findings for the same document — not whatever Gemini happens to return (or fail to return) at that moment. If `fixtures/<source-filename-without-extension>.figures.json` exists, it's used in place of a live Gemini call for that document: no API call, no quota risk, identical results every time.
+
+To create one:
+
+1. Give Claude the source PDF (and the matching slide deck, if you want present/condensed/dropped judged against it) with this prompt:
+
+   > Attached is a source PDF (and, if included, the slide deck generated from it). Find every figure, chart, table or diagram in the PDF — anything that isn't plain paragraph text — and for each one:
+   >
+   > 1. Write a full, standalone description: what type of visual it is, what it shows, every number, label, axis, and category visible on it, and its main takeaway. Write it so someone who can't see the image could still know exactly what it contains.
+   > 2. Give the PDF page number it appears on (page 1 = first page of the file).
+   > 3. If a slide deck is attached, say whether this figure's content made it into the deck: "present" (the data/takeaway is there, even if restyled), "condensed" (only a weaker/partial version made it in), or "dropped" (not represented at all) — and which slide number, if any.
+   >
+   > Return a JSON array, one object per figure, in exactly this shape:
+   > ```
+   > [{"title": "...", "page": <number>, "status": "present|condensed|dropped", "note": "...", "slide": "...", "description": "..."}]
+   > ```
+   > If the PDF has no figures, charts, tables or diagrams, say so instead of returning either.
+
+2. Have a second person (or a second pass) check the result against the real PDF before trusting it — an unverified description is still just a guess, now a permanent one.
+3. Save the JSON array to `fixtures/<source-filename-without-extension>.figures.json`, e.g. a source uploaded as `study_doc_a.pdf` reads `fixtures/study_doc_a.figures.json`.
+
+Fixtures are matched purely by the uploaded file's name, are committed to the repo (unlike `logs/`), and a document with no fixture file still runs the live Gemini check as usual.
+
 ## Layout
 
 Two columns once a deck is uploaded:
@@ -36,6 +61,7 @@ Every session writes a timestamped, append-only log to `logs/<participant>_<time
 - `requirements.txt`: pinned dependencies
 - `researcher_links.html`: a local, researcher-only page for opening the app with a participant ID, and for downloading session logs
 - `samples/`: a made-up source PDF, a slide deck and the results they produce
+- `fixtures/`: precomputed, human-verified figure-check results, one file per study document (see above)
 
 ## Setup
 

@@ -340,6 +340,28 @@ the main takeaway) made it into the slides. Return a JSON array where each item 
 Return [] if the PDF has no figures."""
 
 
+def _figure_items_to_results(items: list[dict]) -> list[dict]:
+    """Shared by the live Gemini path and the fixture path below -- both hand it the same
+    shape of JSON (title/page/status/note/slide/description), so a cached fixture is a
+    drop-in replacement for a live call, not a separate code path."""
+    results = []
+    for item in items:
+        if item.get("status") == "present":
+            continue
+        page_display = str(item.get("page", "")) or "not cited"
+        results.append({
+            "title": item.get("title", "Untitled figure"),
+            "page_display": page_display,
+            "page_num": first_page_int(page_display),
+            "status": item.get("status", "unclear"),
+            "note": item.get("note", ""),
+            "slide": str(item.get("slide", "")),
+            "quotes": [item.get("description", "")],
+            "source": "Figure check",
+        })
+    return results
+
+
 def figure_check(pdf_data: bytes, slides: str) -> list[dict]:
     # Gemini occasionally returns a transient 503 ("high demand"); Google's own advice is to
     # retry shortly after. A 4xx (bad model name, bad request) won't fix itself, so don't retry those
@@ -369,22 +391,26 @@ def figure_check(pdf_data: bytes, slides: str) -> list[dict]:
             if attempt == 2:
                 raise
             time.sleep(5)
-    results = []
-    for item in json.loads(response.text):
-        if item.get("status") == "present":
-            continue
-        page_display = str(item.get("page", "")) or "not cited"
-        results.append({
-            "title": item.get("title", "Untitled figure"),
-            "page_display": page_display,
-            "page_num": first_page_int(page_display),
-            "status": item.get("status", "unclear"),
-            "note": item.get("note", ""),
-            "slide": str(item.get("slide", "")),
-            "quotes": [item.get("description", "")],
-            "source": "Figure check",
-        })
-    return results
+    return _figure_items_to_results(json.loads(response.text))
+
+
+# ---- Figure-check fixtures: a precomputed, human-verified stand-in for a live Gemini call --
+
+FIXTURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+
+
+def load_figure_fixture(filename: str):
+    """For a fixed study document, the figure check shouldn't depend on Gemini being reachable
+    or within quota at the moment a participant happens to click the button -- every participant
+    should see the exact same result. If fixtures/<source-file-stem>.figures.json exists (written
+    once, by hand, from a Claude description of the document -- see the README), it's used in
+    place of the live call. Returns None, not an error, if there's no fixture for this file."""
+    stem = os.path.splitext(filename)[0]
+    path = os.path.join(FIXTURES_DIR, f"{stem}.figures.json")
+    if not os.path.isfile(path):
+        return None
+    with open(path) as f:
+        return json.load(f)
 
 
 # ---- Rendering the marked source page ("Show in source") --------------------
@@ -579,12 +605,18 @@ if run_clicked:
         except Exception as e:
             errors.append(f"Text check failed: {e}")
             log_event("check_error", check="text", error=str(e))
-    with st.spinner("Running figure check..."):
-        try:
-            results += _run_with_timeout(figure_check, pdf_data, slides_prompt_text)
-        except Exception as e:
-            errors.append(f"Figure check failed: {e}")
-            log_event("check_error", check="figure", error=str(e))
+    fixture = load_figure_fixture(source.name)
+    if fixture is not None:
+        results += _figure_items_to_results(fixture)
+        log_event("figure_check_source", source="fixture", filename=source.name)
+    else:
+        with st.spinner("Running figure check..."):
+            try:
+                results += _run_with_timeout(figure_check, pdf_data, slides_prompt_text)
+                log_event("figure_check_source", source="gemini", filename=source.name)
+            except Exception as e:
+                errors.append(f"Figure check failed: {e}")
+                log_event("check_error", check="figure", error=str(e))
     st.session_state["results"] = results
     st.session_state["errors"] = errors
     log_event("check_completed", findings=len(results), seconds=round(time.time() - t0, 1))

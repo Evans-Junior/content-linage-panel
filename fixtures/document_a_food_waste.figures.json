@@ -1,0 +1,18 @@
+[
+  {
+    "title": "Weekly average daily food waste, baseline vs intervention (Figure 1)",
+    "page": 2,
+    "status": "condensed",
+    "note": "Slide 4 gives only the single overall before/after average (42.8kg to 31.9kg, 25%); the week-by-week trend and the six individual weekly values from the chart are not shown anywhere in the deck.",
+    "slide": "4",
+    "description": "A bar chart titled 'Figure 1. Weekly average daily food waste, baseline vs intervention'. Six bars, one per week, in kilograms of average daily food waste. Baseline (Week 1-3, grey): 42.5, 44.1, 41.8 kg. Intervention (Week 4-6, orange): 35.6, 31.2, 29.0 kg, separated by a dashed vertical line. Shows a clear downward trend across the three intervention weeks, not just a flat before/after split."
+  },
+  {
+    "title": "Weekly average daily dining hall attendance (Figure 2)",
+    "page": 2,
+    "status": "condensed",
+    "note": "Slide 4 states only the bare conclusion 'meal counts stayed stable, so fewer diners did not explain the drop'; none of the actual weekly attendance numbers or the chart itself appear in the deck.",
+    "slide": "4",
+    "description": "A bar chart titled 'Figure 2. Weekly average daily dining hall attendance'. Six bars, one per week, in average daily card-swipe count. Baseline (Week 1-3, grey): 1210, 1195, 1220. Intervention (Week 4-6, orange): 1185, 1205, 1198, separated by a dashed vertical line. All six values sit in a narrow band (roughly 1185-1220), supporting the claim that attendance stayed essentially flat across the study."
+  }
+]

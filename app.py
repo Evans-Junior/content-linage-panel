@@ -273,6 +273,12 @@ def text_check(name: str, data: bytes, slides: str) -> list[dict]:
     response = claude.messages.create(
         model=CLAUDE_MODEL,
         max_tokens=16000,
+        # Extended thinking is on by default for this model/account. With it on, longer or more
+        # complex source PDFs (real study documents, not the small sample) make the model write
+        # its whole answer as one continuous block instead of the quote-by-quote style citations
+        # need -- confirmed in testing: same document, same prompt, citations silently vanish
+        # with thinking on and come back reliably with it off, on repeated runs either way.
+        thinking={"type": "disabled"},
         messages=[{
             "role": "user",
             "content": [doc, {"type": "text", "text": TEXT_PROMPT.format(slides=slides)}],

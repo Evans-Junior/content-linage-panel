@@ -49,6 +49,7 @@ def _run_with_timeout(fn, *args, **kwargs):
     finally:
         executor.shutdown(wait=False)  # don't block the UI on a thread that may never return
 
+
 REQUIRED_VARS = ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "APP_PASSWORD"]
 
 st.set_page_config(page_title="Content Lineage Panel", layout="wide")
@@ -541,6 +542,25 @@ def render_panel(results: list[dict], pdf_data: bytes):
 
 # ---- UI ---------------------------------------------------------------------
 
+def _centered_loading(text: str):
+    """A horizontally centered loading indicator, placed at the page's full width (not inside
+    either column), rather than Streamlit's own left-aligned st.spinner. Deliberately not a
+    full-screen overlay: that would cover the slide viewer and panel above, which are drawn
+    before this point specifically so they stay visible while a check runs."""
+    st.markdown(
+        f"""
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+                     gap:12px;padding:2.5rem 0;">
+          <div style="width:40px;height:40px;border:4px solid #e3e6eb;border-top-color:#3454d6;
+                       border-radius:50%;animation:clp-spin 0.8s linear infinite;"></div>
+          <div style="color:#667085;font-size:14px;">{text}</div>
+        </div>
+        <style>@keyframes clp-spin {{ to {{ transform: rotate(360deg); }} }}</style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 source = st.file_uploader(
     "Source document (PDF only)", type=["pdf"],
     help="Word users: File > Save as PDF first. Page numbers in the results count from the "
@@ -567,10 +587,21 @@ else:
     slides_list, slides_prompt_text = None, ""
 
 if source and pdf_data and not pdf_data.startswith(b"%PDF"):
-    st.error("That file is not a valid PDF. Please export your document as a PDF and upload it again.")
+    st.error("That file could not be read as a PDF. Export it as a PDF and upload it again.")
     st.stop()
 
-run_clicked = source and slides_upload and st.button("Check lineage")
+# Runs automatically as soon as both files are present, rather than waiting on a button click --
+# keyed to the exact pair (by name+size) so re-uploading either file re-triggers it, but nothing
+# else (switching slides in the viewer, adding a note) does, since those are fragment-scoped
+# reruns that never reach this top-level code at all.
+check_sig = f"{source.name}:{source.size}:{slides_upload.name}:{slides_upload.size}" if source and slides_upload else None
+need_check = check_sig is not None and st.session_state.get("checked_sig") != check_sig
+rerun_clicked = (
+    source and slides_upload and not need_check
+    and st.button("Run again", help="Re-run both checks for this same pair of files.")
+)
+if rerun_clicked:
+    need_check = True
 
 # The slide viewer and panel are drawn here, before the (possibly slow) check runs below --
 # previously this whole block sat after the check, so for as long as a check was running --
@@ -590,33 +621,36 @@ if slides_upload:
                 render_panel(st.session_state["results"], pdf_data)
             else:
                 st.markdown("#### What is missing")
-                st.caption("Upload a source PDF and click Check lineage to see results here.")
+                st.caption("Upload a source document and a slide deck to see results here.")
 
 for err in st.session_state.get("errors", []):
     st.error(err)
 
-if run_clicked:
+if need_check:
+    # Marked before running, not after: a failed check still counts as "checked" for this exact
+    # pair, so a quota error doesn't silently retry itself on every unrelated rerun -- "Run again"
+    # above is the explicit way to retry the same pair.
+    st.session_state["checked_sig"] = check_sig
+    _centered_loading("Checking lineage...")
     log_event("check_started")
     t0 = time.time()
     results, errors = [], []
-    with st.spinner("Running text check..."):
-        try:
-            results += _run_with_timeout(text_check, source.name, pdf_data, slides_prompt_text)
-        except Exception as e:
-            errors.append(f"Text check failed: {e}")
-            log_event("check_error", check="text", error=str(e))
+    try:
+        results += _run_with_timeout(text_check, source.name, pdf_data, slides_prompt_text)
+    except Exception as e:
+        errors.append(f"Text check failed: {e}")
+        log_event("check_error", check="text", error=str(e))
     fixture = load_figure_fixture(source.name)
     if fixture is not None:
         results += _figure_items_to_results(fixture)
         log_event("figure_check_source", source="fixture", filename=source.name)
     else:
-        with st.spinner("Running figure check..."):
-            try:
-                results += _run_with_timeout(figure_check, pdf_data, slides_prompt_text)
-                log_event("figure_check_source", source="gemini", filename=source.name)
-            except Exception as e:
-                errors.append(f"Figure check failed: {e}")
-                log_event("check_error", check="figure", error=str(e))
+        try:
+            results += _run_with_timeout(figure_check, pdf_data, slides_prompt_text)
+            log_event("figure_check_source", source="gemini", filename=source.name)
+        except Exception as e:
+            errors.append(f"Figure check failed: {e}")
+            log_event("check_error", check="figure", error=str(e))
     st.session_state["results"] = results
     st.session_state["errors"] = errors
     log_event("check_completed", findings=len(results), seconds=round(time.time() - t0, 1))

@@ -1,0 +1,18 @@
+[
+  {
+    "title": "Near-miss incidents by hour of day (Figure 1)",
+    "page": 1,
+    "status": "condensed",
+    "note": "Slide 4 states only the qualitative claim that events 'clustered around the morning and afternoon rush hours'; the actual hourly breakdown, the two specific peak hours (8-9am and 4-5pm), and their incident counts (11 and 12) are not shown anywhere in the deck.",
+    "slide": "4",
+    "description": "A bar chart titled 'Figure 1. Near-miss incidents by hour of day', with one bar per hourly bin from 7am to 6pm, showing the count of near-miss incidents observed. Values: 7-8am 3, 8-9am 11, 9-10am 5, 10-11am 2, 11am-12pm 3, 12-1pm 4, 1-2pm 3, 2-3pm 5, 3-4pm 7, 4-5pm 12, 5-6pm 6. Two clear peaks stand out: 8-9am (11) and 4-5pm (12, the tallest bar)."
+  },
+  {
+    "title": "Daily cyclist volume through the intersection (Figure 2)",
+    "page": 2,
+    "status": "condensed",
+    "note": "Slide 4 states only the bare conclusion that 'cyclist volume stayed steady across the two weeks, so the peaks are not just more riders'; none of the actual daily counts or the chart itself appear in the deck.",
+    "slide": "4",
+    "description": "A bar chart titled 'Figure 2. Daily cyclist volume through the intersection', with one bar per observation day (days 1-14), showing cyclists counted each day. All 14 values sit in a narrow band of roughly 510-550 cyclists, with no clear upward or downward trend -- supporting the claim that cyclist volume was essentially flat across the two-week study."
+  }
+]
